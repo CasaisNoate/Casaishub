@@ -1,5 +1,5 @@
 -- Configurações iniciais
-getgenv().AutoFarm = true
+getgenv().AutoFarm = false
 getgenv().AutoCollect = true
 getgenv().AutoQuest = true
 getgenv().AutoFruitCollect = true
@@ -38,7 +38,6 @@ local function UpdateSpeeds()
 end
 
 local function TeleportToMission()
-    if not getgenv().AutoQuest then return end
     local currentLevel = Player:WaitForChild("Level").Value
     local bestMission = nil
     local shortestDistance = math.huge
@@ -81,6 +80,13 @@ local function AutoAttack()
     if not getgenv().AutoFarm then return end
     if tick() - lastAttack < getgenv().AttackSpeed then return end
     lastAttack = tick()
+
+    -- Pegar missão automaticamente primeiro
+    if getgenv().AutoQuest then
+        TeleportToMission()
+    end
+
+    -- Achar inimigo e atacar
     local closestEnemy, closestDistance = nil, math.huge
     for _, enemy in ipairs(Workspace:WaitForChild("Enemies"):GetChildren()) do
         if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 and enemy:FindFirstChild("HumanoidRootPart") then
@@ -91,12 +97,11 @@ local function AutoAttack()
             end
         end
     end
+
     if closestEnemy then
         RootPart.CFrame = closestEnemy.HumanoidRootPart.CFrame + Vector3.new(0, 2, 0)
         task.wait(0.1)
         ReplicatedStorage.RemoteEvents.Combat:FireServer(closestEnemy.HumanoidRootPart.Position, closestEnemy)
-    else
-        TeleportToMission()
     end
 end
 
