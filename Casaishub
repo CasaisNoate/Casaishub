@@ -1,4 +1,4 @@
--- Configurações iniciais
+-- Configurações
 getgenv().AutoFarm = true
 getgenv().AutoCollect = true
 getgenv().AutoQuest = true
@@ -15,120 +15,126 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 
--- Variáveis locais
+-- Variáveis
 local Player = Players.LocalPlayer
 local Character = Player.Character or Player.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local RootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Conexões
-local Connections = {}
-
--- Funções auxiliares
+-- Funções úteis
 local function Notify(title, text)
-    StarterGui:SetCore("SendNotification", {
-        Title = title,
-        Text = text,
-        Duration = 5
-    })
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 5
+        })
+    end)
 end
 
 local function UpdateSpeeds()
-    Humanoid.WalkSpeed = getgenv().WalkSpeed
+    if Humanoid then
+        Humanoid.WalkSpeed = getgenv().WalkSpeed
+    end
 end
 
+-- Auto Coleta de Itens (Coins, Chests, etc)
 local function AutoCollectItems()
     if not getgenv().AutoCollect then return end
     for _, item in pairs(Workspace:GetChildren()) do
-        if item:FindFirstChild("ClickDetector") and (item.Name:find("Coin") or item.Name:find("Gem") or item.Name:find("Chest")) then
-            local distance = (RootPart.Position - item.Position).Magnitude
-            if distance < 50 then
+        if item:FindFirstChild("ClickDetector") and (item.Name:find("Coin") or item.Name:find("Chest") or item.Name:find("Gem")) then
+            local dist = (RootPart.Position - item.Position).Magnitude
+            if dist < 50 then
                 fireclickdetector(item.ClickDetector)
             end
         end
     end
 end
 
--- NOVA VERSÃO do AutoAttack COM AutoQuest EMBUTIDO
-local function AutoAttack()
-    if not getgenv().AutoFarm then return end
-    if tick() - lastAttack < getgenv().AttackSpeed then return end
-    lastAttack = tick()
-
-    -- Pegar missão automaticamente
-    local level = Player:WaitForChild("Level").Value
-    local bestMission = nil
-    local shortestDistance = math.huge
-
-    for _, mission in pairs(Workspace:WaitForChild("Missions"):GetChildren()) do
-        local head = mission:FindFirstChild("Head")
-        local reqLevel = mission:FindFirstChild("Level")
-        if head and reqLevel and reqLevel:IsA("IntValue") then
-            if reqLevel.Value <= level + 10 then
-                local distance = (RootPart.Position - head.Position).Magnitude
-                if distance < shortestDistance then
-                    bestMission = mission
-                    shortestDistance = distance
-                end
-            end
-        end
-    end
-
-    if not bestMission then return end
-
-    -- Ativa missão
-    RootPart.CFrame = bestMission.Head.CFrame + Vector3.new(0, 3, 0)
-    task.wait(0.3)
-    local prompt = bestMission.Head:FindFirstChildOfClass("ProximityPrompt")
-    if prompt then
-        fireproximityprompt(prompt)
-    end
-
-    -- Nome da missão = nome do inimigo (assumido)
-    local targetName = bestMission.Name
-
-    -- Encontrar inimigo correspondente
-    for _, enemy in ipairs(Workspace:WaitForChild("Enemies"):GetChildren()) do
-        if enemy.Name:find(targetName) and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-            local enemyPart = enemy:FindFirstChild("HumanoidRootPart")
-            if enemyPart then
-                RootPart.CFrame = enemyPart.CFrame + Vector3.new(0, 2, 0)
-                task.wait(0.1)
-                ReplicatedStorage.RemoteEvents.Combat:FireServer(enemyPart.Position, enemy)
-                break
-            end
-        end
-    end
-end
-
+-- Auto Coleta de Frutas
 local function AutoCollectFruits()
     if not getgenv().AutoFruitCollect then return end
     for _, fruit in pairs(Workspace:GetChildren()) do
         if fruit:IsA("Tool") and fruit:FindFirstChild("Handle") and fruit.Name:find("Fruit") then
-            local distance = (RootPart.Position - fruit.Handle.Position).Magnitude
-            if distance < 200 then
+            local dist = (RootPart.Position - fruit.Handle.Position).Magnitude
+            if dist < 200 then
                 RootPart.CFrame = fruit.Handle.CFrame + Vector3.new(0, 3, 0)
                 task.wait(0.2)
                 firetouchinterest(RootPart, fruit.Handle, 0)
                 firetouchinterest(RootPart, fruit.Handle, 1)
-                Notify("Fruta Coletada!", fruit.Name)
+                Notify("Fruta Coletada", fruit.Name)
             end
         end
     end
 end
 
+-- Auto Spin de Fruta
 local function AutoSpinFruit()
     if not getgenv().AutoFruitSpin then return end
     local spinRemote = ReplicatedStorage:FindFirstChild("RemoteEvents") and ReplicatedStorage.RemoteEvents:FindFirstChild("SpinFruit")
     if spinRemote then
         spinRemote:FireServer()
-        Notify("Girando Fruta", "Uma fruta foi girada!")
+        Notify("Spin de Fruta", "Você girou uma fruta!")
+    end
+end
+
+-- Auto Farm com Auto Quest (integrado)
+local currentMission = nil
+local missionCooldown = 0
+
+local function AutoFarm()
+    if not getgenv().AutoFarm then return end
+    if tick() - lastAttack < getgenv().AttackSpeed then return end
+    lastAttack = tick()
+
+    -- Coletar missão se necessário
+    if getgenv().AutoQuest and (not currentMission or tick() > missionCooldown) then
+        local level = Player:WaitForChild("Level").Value
+        local closest, dist = nil, math.huge
+
+        for _, mission in pairs(Workspace:WaitForChild("Missions"):GetChildren()) do
+            local head = mission:FindFirstChild("Head")
+            local reqLevel = mission:FindFirstChild("Level")
+            if head and reqLevel and reqLevel:IsA("IntValue") and reqLevel.Value <= level + 10 then
+                local d = (RootPart.Position - head.Position).Magnitude
+                if d < dist then
+                    dist = d
+                    closest = mission
+                end
+            end
+        end
+
+        if closest then
+            RootPart.CFrame = closest.Head.CFrame + Vector3.new(0, 3, 0)
+            task.wait(0.4)
+            local prompt = closest.Head:FindFirstChildOfClass("ProximityPrompt")
+            if prompt then
+                fireproximityprompt(prompt)
+                currentMission = closest.Name
+                missionCooldown = tick() + 10 -- cooldown para evitar spam
+            end
+        end
+    end
+
+    -- Atacar inimigo da missão
+    if currentMission then
+        for _, enemy in pairs(Workspace:WaitForChild("Enemies"):GetChildren()) do
+            if enemy.Name:find(currentMission) and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                local hrp = enemy:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    RootPart.CFrame = hrp.CFrame + Vector3.new(0, 2, 0)
+                    task.wait(0.1)
+                    ReplicatedStorage.RemoteEvents.Combat:FireServer(hrp.Position, enemy)
+                    break
+                end
+            end
+        end
     end
 end
 
 -- Loop principal
 local function MainLoop()
-    if not Character or not RootPart or not Humanoid or Humanoid.Health <= 0 then
+    if not Character or not Humanoid or Humanoid.Health <= 0 then
         Character = Player.CharacterAdded:Wait()
         Humanoid = Character:WaitForChild("Humanoid")
         RootPart = Character:WaitForChild("HumanoidRootPart")
@@ -137,12 +143,12 @@ local function MainLoop()
     end
     UpdateSpeeds()
     AutoCollectItems()
-    AutoAttack()
     AutoCollectFruits()
     AutoSpinFruit()
+    AutoFarm()
 end
 
--- Inicialização do personagem
+-- Atualiza personagem
 Player.CharacterAdded:Connect(function(char)
     Character = char
     Humanoid = char:WaitForChild("Humanoid")
@@ -150,6 +156,7 @@ Player.CharacterAdded:Connect(function(char)
     UpdateSpeeds()
 end)
 
-table.insert(Connections, RunService.Heartbeat:Connect(function()
+-- Conecta loop
+RunService.Heartbeat:Connect(function()
     pcall(MainLoop)
-end))
+end)
