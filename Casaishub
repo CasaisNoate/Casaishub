@@ -2,8 +2,8 @@
 getgenv().AutoFarm = true
 getgenv().AutoCollect = true
 getgenv().AutoQuest = true
-getgenv().AutoFruitCollect = false
-getgenv().AutoFruitSpin = false
+getgenv().AutoFruitCollect = true
+getgenv().AutoFruitSpin = true
 getgenv().AttackSpeed = 0.1
 getgenv().WalkSpeed = 50
 local lastAttack = 0
@@ -13,6 +13,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
 
 -- Variáveis locais
 local Player = Players.LocalPlayer
@@ -23,19 +24,24 @@ local RootPart = Character:WaitForChild("HumanoidRootPart")
 -- Conexões
 local Connections = {}
 
--- Atualizar velocidade
+-- Funções auxiliares
+local function Notify(title, text)
+    StarterGui:SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Duration = 5
+    })
+end
+
 local function UpdateSpeeds()
     Humanoid.WalkSpeed = getgenv().WalkSpeed
 end
 
--- Auto Missão
 local function TeleportToMission()
     if not getgenv().AutoQuest then return end
-
     local currentLevel = Player:WaitForChild("Level").Value
     local bestMission = nil
     local shortestDistance = math.huge
-
     for _, mission in pairs(Workspace:WaitForChild("Missions"):GetChildren()) do
         local head = mission:FindFirstChild("Head")
         local level = mission:FindFirstChild("Level")
@@ -49,7 +55,6 @@ local function TeleportToMission()
             end
         end
     end
-
     if bestMission then
         RootPart.CFrame = bestMission.Head.CFrame + Vector3.new(0, 3, 0)
         task.wait(0.3)
@@ -60,10 +65,8 @@ local function TeleportToMission()
     end
 end
 
--- Auto Coleta
 local function AutoCollectItems()
     if not getgenv().AutoCollect then return end
-
     for _, item in pairs(Workspace:GetChildren()) do
         if item:FindFirstChild("ClickDetector") and (item.Name:find("Coin") or item.Name:find("Gem") or item.Name:find("Chest")) then
             local distance = (RootPart.Position - item.Position).Magnitude
@@ -74,34 +77,22 @@ local function AutoCollectItems()
     end
 end
 
--- Auto Farm
-local currentTarget = nil
 local function AutoAttack()
     if not getgenv().AutoFarm then return end
     if tick() - lastAttack < getgenv().AttackSpeed then return end
     lastAttack = tick()
-
-    if currentTarget and currentTarget:FindFirstChild("Humanoid") and currentTarget.Humanoid.Health > 0 then
-        ReplicatedStorage.RemoteEvents.Combat:FireServer(currentTarget.HumanoidRootPart.Position, currentTarget)
-        return
-    end
-
-    currentTarget = nil
     local closestEnemy, closestDistance = nil, math.huge
-
     for _, enemy in ipairs(Workspace:WaitForChild("Enemies"):GetChildren()) do
         if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 and enemy:FindFirstChild("HumanoidRootPart") then
             local distance = (RootPart.Position - enemy.HumanoidRootPart.Position).Magnitude
-            if distance <= 120 and distance < closestDistance then
+            if distance < closestDistance then
                 closestDistance = distance
                 closestEnemy = enemy
             end
         end
     end
-
     if closestEnemy then
         RootPart.CFrame = closestEnemy.HumanoidRootPart.CFrame + Vector3.new(0, 2, 0)
-        currentTarget = closestEnemy
         task.wait(0.1)
         ReplicatedStorage.RemoteEvents.Combat:FireServer(closestEnemy.HumanoidRootPart.Position, closestEnemy)
     else
@@ -109,30 +100,28 @@ local function AutoAttack()
     end
 end
 
--- Auto Coleta de Fruta
 local function AutoCollectFruits()
     if not getgenv().AutoFruitCollect then return end
-
     for _, fruit in pairs(Workspace:GetChildren()) do
         if fruit:IsA("Tool") and fruit:FindFirstChild("Handle") and fruit.Name:find("Fruit") then
             local distance = (RootPart.Position - fruit.Handle.Position).Magnitude
-            if distance < 100 then
+            if distance < 200 then
                 RootPart.CFrame = fruit.Handle.CFrame + Vector3.new(0, 3, 0)
-                task.wait(0.3)
+                task.wait(0.2)
                 firetouchinterest(RootPart, fruit.Handle, 0)
                 firetouchinterest(RootPart, fruit.Handle, 1)
+                Notify("Fruta Coletada!", fruit.Name)
             end
         end
     end
 end
 
--- Girar Fruta
 local function AutoSpinFruit()
     if not getgenv().AutoFruitSpin then return end
-
     local spinRemote = ReplicatedStorage:FindFirstChild("RemoteEvents") and ReplicatedStorage.RemoteEvents:FindFirstChild("SpinFruit")
     if spinRemote then
         spinRemote:FireServer()
+        Notify("Girando Fruta", "Uma fruta foi girada!")
     end
 end
 
@@ -145,7 +134,6 @@ local function MainLoop()
         UpdateSpeeds()
         return
     end
-
     UpdateSpeeds()
     AutoCollectItems()
     AutoAttack()
@@ -164,71 +152,3 @@ end)
 table.insert(Connections, RunService.Heartbeat:Connect(function()
     pcall(MainLoop)
 end))
-
--- UI
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-local Window = Library.CreateLib("Auto Farm Premium", "Sentinel")
-
--- Farm
-local FarmTab = Window:NewTab("Farm")
-local FarmSection = FarmTab:NewSection("Configuração de Farm")
-
-FarmSection:NewToggle("Ativar Auto Farm", "Ataca inimigos automaticamente", function(state)
-    getgenv().AutoFarm = state
-end)
-FarmSection:NewToggle("Ativar Coleta Automática", "Coleta itens automaticamente", function(state)
-    getgenv().AutoCollect = state
-end)
-FarmSection:NewToggle("Ativar Missão Automática", "Pega missões automaticamente", function(state)
-    getgenv().AutoQuest = state
-end)
-
--- Player
-local PlayerTab = Window:NewTab("Player")
-local PlayerSection = PlayerTab:NewSection("Velocidade e Delay")
-
-PlayerSection:NewSlider("Velocidade", "Altera a velocidade do personagem", 500, 16, function(s)
-    getgenv().WalkSpeed = s
-    UpdateSpeeds()
-end)
-PlayerSection:NewSlider("Velocidade de Ataque", "Delay entre ataques", 100, 1, function(s)
-    getgenv().AttackSpeed = s / 100
-end)
-
--- Frutas
-local FruitTab = Window:NewTab("Frutas")
-local FruitSection = FruitTab:NewSection("Frutas Automáticas")
-
-FruitSection:NewToggle("Pegar Frutas do Mapa", "Coleta frutas do notificador", function(state)
-    getgenv().AutoFruitCollect = state
-end)
-FruitSection:NewToggle("Girar Frutas Automaticamente", "Gira frutas usando spin", function(state)
-    getgenv().AutoFruitSpin = state
-end)
-
--- Controles Gerais
-local ControlTab = Window:NewTab("Controles")
-local ControlSection = ControlTab:NewSection("Controles Gerais")
-
-local function StopAll()
-    for _, connection in ipairs(Connections) do
-        connection:Disconnect()
-    end
-    getgenv().AutoFarm = false
-    getgenv().AutoCollect = false
-    getgenv().AutoQuest = false
-    getgenv().AutoFruitCollect = false
-    getgenv().AutoFruitSpin = false
-    Humanoid.WalkSpeed = 16
-end
-
-ControlSection:NewButton("Parar Tudo", "Desativa todas as funções", function()
-    StopAll()
-end)
-ControlSection:NewButton("Reiniciar Script", "Reinicia o script", function()
-    StopAll()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/seu-repositorio/script/main/autofarm.lua"))()
-end)
-
--- Ativa velocidade inicial
-UpdateSpeeds()
